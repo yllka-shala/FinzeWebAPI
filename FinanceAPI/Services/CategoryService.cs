@@ -1,0 +1,146 @@
+﻿using FinanceAPI.Data;
+using FinanceAPI.DTOs;
+using FinanceAPI.Helpers;
+using FinanceAPI.Models;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+
+namespace FinanceAPI.Services
+{
+    public class CategoryService : ICategoryService
+    {
+        private readonly FinanceDBContex _context;
+        private readonly CurrentUser _currentUser;
+
+        public CategoryService(FinanceDBContex contex, 
+                               CurrentUser currentUser)
+        {
+            _context = contex;
+            _currentUser = currentUser;
+        }
+
+        public async Task<ApiResponse<PaginatedList<CategoryWithUserDto>>> GetAll(string? search, int pageNumber = 1, int pageSize = 10)
+        {
+
+            var query = _context.Categories
+                                        .Join(
+                                            _context.Users,
+                                            c => c.UserId,
+                                            u => u.Id,
+                                            (c, u) => new CategoryWithUserDto
+                                            {
+                                                Id = c.Id,
+                                                Name = c.Name,
+                                                Date = c.Date,
+                                                UserId = c.UserId,
+                                                Username = u.FirstName + " " + u.LastName
+                                            }
+                                        );
+
+
+            if (query == null)
+                return ApiResponse<PaginatedList<CategoryWithUserDto>>.FailureResponse("Empty list!");
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                query = query.Where(t => t.UserId == userId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query = query.Where(p =>
+                    p.Name.Contains(search) ||
+                    p.Username.Contains(search));
+            }
+
+            var result = await PaginatedList<CategoryWithUserDto>.CreateAsync(query, pageNumber, pageSize);
+            return ApiResponse<PaginatedList<CategoryWithUserDto>>.SuccessResponse(result);
+        }
+
+        public async Task<ApiResponse<List<CategoryWithUserDto>>> GetCategories()
+        {
+            var category = await _context.Categories
+                                          .Join(
+                                               _context.Users,
+                                               c => c.UserId,
+                                               u => u.Id,
+                                               (c, u) => new CategoryWithUserDto
+                                               {
+                                                   Id = c.Id,
+                                                   Name = c.Name,
+                                                   Date = c.Date,
+                                                   UserId = c.UserId,
+                                                   Username = u.FirstName + " " + u.LastName
+                                               }
+                                          )
+                                          .Where(c => c.UserId == _currentUser.LoggedInUser())
+                                          .ToListAsync();
+
+
+            if (category == null)
+                return ApiResponse<List<CategoryWithUserDto>>.FailureResponse("Empty list!");
+
+            return ApiResponse<List<CategoryWithUserDto>>.SuccessResponse(category);
+        }
+
+        public async Task<ApiResponse<Category>> GetById(int? id)
+        {
+            var category = await _context.Categories.FindAsync(id);
+            if (category == null)
+                return ApiResponse<Category>.FailureResponse("Category not found!");
+
+            return ApiResponse<Category>.SuccessResponse(category);
+        }
+
+        public async Task<ApiResponse<Category>> Create(CategoryDTO model)
+        {
+            var exists = _context.Categories.Any(b => b.Name == model.Name && b.UserId == _currentUser.LoggedInUser());
+            if (exists)
+                return ApiResponse<Category>.FailureResponse("Category not found!");
+
+            var create = new Category
+            {
+                Name = model.Name,
+                UserId = _currentUser.LoggedInUser()
+            };
+
+            await _context.Categories.AddAsync(create);
+            await _context.SaveChangesAsync();
+
+            return ApiResponse<Category>.SuccessResponse(create);
+        }
+
+        public async Task<ApiResponse<Category>> Update(CategoryDTO update, int? id)
+        {
+            var existingCategory = await _context.Categories.FindAsync(id);
+            if (existingCategory == null)
+                return ApiResponse<Category>.FailureResponse("Category not found!");
+
+            var exists = _context.Categories.Any(b => b.Name == update.Name && b.Id != id && b.UserId == _currentUser.LoggedInUser());
+            if (exists)
+                return ApiResponse<Category>.FailureResponse("Name already exists!");
+
+            existingCategory.Name = update.Name;
+            existingCategory.UserId = _currentUser.LoggedInUser();
+
+            await _context.SaveChangesAsync();
+
+            return ApiResponse<Category>.SuccessResponse(existingCategory);
+        }
+
+        public async Task<ApiResponse<Category>> Delete(int? id)
+        {
+            var category = await _context.Categories.FindAsync(id);
+            if (category == null)
+                return ApiResponse<Category>.FailureResponse("Category not found!");
+
+            _context.Categories.Remove(category);
+            await _context.SaveChangesAsync();
+
+            return ApiResponse<Category>.SuccessResponse(category);
+        }
+
+    }
+}
