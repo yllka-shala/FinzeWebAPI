@@ -74,5 +74,15 @@ namespace FinanceAPI.Controllers
 
             return Ok(response);
         }
+
+        [HttpPost("ExportExcel")]
+        public async Task<IActionResult> ExportExcel()
+        {
+            var content = await _service.ExportExcel();
+            var contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"BillReminderReport_{DateTime.Now:dd-MM-yyyy}.xlsx";
+
+            return File(content, contentType, fileName);
+        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using FinanceAPI.Data;
+﻿using ClosedXML.Excel;
+using FinanceAPI.Data;
 using FinanceAPI.DTOs;
 using FinanceAPI.Helpers;
 using FinanceAPI.Models;
@@ -130,6 +131,42 @@ namespace FinanceAPI.Services
                 return ApiResponse<List<Frequency>>.FailureResponse("Empty list!");
 
             return ApiResponse<List<Frequency>>.SuccessResponse(frequencies);
+        }
+
+        public async Task<byte[]> ExportExcel()
+        {
+            var recurrings = await _context.Recurrings
+                                        .Include(f => f.Frequency)
+                                        .Include(u => u.User)
+                                        .ToListAsync();
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                recurrings = recurrings.Where(t => t.UserId == userId).ToList();
+            }
+
+            var exportData = recurrings.Select(u => new
+            {
+                Id = u.Id,
+                Name = u.Name,
+                Amount = $"{u.Amount}$",
+                DueDate = u.DueDate.ToString("dd-MM-yyyy"),
+                Frequency = u.Frequency!.Name,
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Recurrings");
+
+            worksheet.Cell("A1").InsertTable(exportData);
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
         }
     }
 }

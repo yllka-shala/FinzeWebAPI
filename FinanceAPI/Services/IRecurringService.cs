@@ -12,5 +12,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Recurring>> Update(RecurringDTO update, int? id);
         Task<ApiResponse<Recurring>> Delete(int? id);
         Task<ApiResponse<List<Frequency>>> GetFrequencies();
+        Task<byte[]> ExportExcel();
     }
 }

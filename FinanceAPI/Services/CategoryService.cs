@@ -1,4 +1,5 @@
-﻿using FinanceAPI.Data;
+﻿using ClosedXML.Excel;
+using FinanceAPI.Data;
 using FinanceAPI.DTOs;
 using FinanceAPI.Helpers;
 using FinanceAPI.Models;
@@ -140,6 +141,49 @@ namespace FinanceAPI.Services
             await _context.SaveChangesAsync();
 
             return ApiResponse<Category>.SuccessResponse(category);
+        }
+
+        public async Task<byte[]> ExportExcel()
+        {
+            var categories = _context.Categories
+                                       .Join(
+                                           _context.Users,
+                                           c => c.UserId,
+                                           u => u.Id,
+                                           (c, u) => new CategoryWithUserDto
+                                           {
+                                               Id = c.Id,
+                                               Name = c.Name,
+                                               Date = c.Date,
+                                               UserId = c.UserId,
+                                               Username = u.FirstName + " " + u.LastName
+                                           }
+                                       );
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                categories = categories.Where(t => t.UserId == userId);
+            }
+
+            var exportData = categories.Select(u => new
+            {
+                Id = u.Id,
+                Name = u.Name,
+                Date = u.Date.ToString("dd-MM-yyyy"),
+                Username = u.Username
+            }).ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Category");
+
+            worksheet.Cell("A1").InsertTable(exportData);
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
         }
 
     }

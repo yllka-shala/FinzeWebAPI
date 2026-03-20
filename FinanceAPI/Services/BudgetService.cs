@@ -1,4 +1,5 @@
-﻿using FinanceAPI.Data;
+﻿using ClosedXML.Excel;
+using FinanceAPI.Data;
 using FinanceAPI.DTOs;
 using FinanceAPI.Helpers;
 using FinanceAPI.Models;
@@ -188,6 +189,42 @@ namespace FinanceAPI.Services
                 return true;
 
             return false;
+        }
+
+        public async Task<byte[]> ExportExcel()
+        {
+            var budgets = await _context.Budgets
+                                        .Include(c => c.Category)
+                                        .Include(u => u.User)
+                                        .ToListAsync();
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                budgets = budgets.Where(t => t.UserId == userId).ToList();
+            }
+
+            var exportData = budgets.Select(u => new
+            {
+                Id = u.Id,
+                Category = u.Category!.Name,
+                Limit = $"{u.Limit}$",
+                CurrentSpent = $"{u.CurrentSpent}$",
+                Remaining = $"{u.Remaining}$",
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Budgets");
+
+            worksheet.Cell("A1").InsertTable(exportData);
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
         }
     }
 }

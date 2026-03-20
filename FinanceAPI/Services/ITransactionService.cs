@@ -12,5 +12,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Transaction>> Update(UpdateTransactionDTO update, int? id);
         Task<ApiResponse<Transaction>> Delete(int? id);
         Task<ApiResponse<List<PaymentMethod>>> GetPaymentMethods();
+        Task<byte[]> ExportExcel();
     }
 }

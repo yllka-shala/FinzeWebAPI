@@ -12,5 +12,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<FinancialAccount>> Update(FinancialAccountDTO update, int? id);
         Task<ApiResponse<FinancialAccount>> Delete(int? id);
         Task<ApiResponse<List<AccountType>>> GetAccountTypes();
+        Task<byte[]> ExportExcel();
     }
 }

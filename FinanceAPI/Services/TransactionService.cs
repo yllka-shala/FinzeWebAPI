@@ -1,4 +1,5 @@
-﻿using FinanceAPI.Data;
+﻿using ClosedXML.Excel;
+using FinanceAPI.Data;
 using FinanceAPI.DTOs;
 using FinanceAPI.Enums;
 using FinanceAPI.Helpers;
@@ -251,5 +252,42 @@ namespace FinanceAPI.Services
             return true;
         }
 
+        public async Task<byte[]> ExportExcel()
+        {
+            var transactions = await _context.Transactions
+                                            .Include(c => c.Category)
+                                            .Include(pm => pm.PaymentMethod)
+                                            .Include(u => u.User)
+                                            .ToListAsync();
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                transactions = transactions.Where(t => t.UserId == userId).ToList();
+            }
+
+            var exportData = transactions.Select(u => new
+            {
+                Id = u.Id,
+                Description = u.Description,
+                Amount = $"{u.Amount}$",
+                Category = u.Category!.Name,
+                TransactionDate = u.TransactionDate.ToString("dd-MM-yyyy"),
+                PaymentMethod = u.PaymentMethod!.Name,
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Transactions");
+
+            worksheet.Cell("A1").InsertTable(exportData);
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
+        }
     }
 }

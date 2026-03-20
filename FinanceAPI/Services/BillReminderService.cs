@@ -1,4 +1,5 @@
-﻿using FinanceAPI.Data;
+﻿using ClosedXML.Excel;
+using FinanceAPI.Data;
 using FinanceAPI.DTOs;
 using FinanceAPI.Enums;
 using FinanceAPI.Helpers;
@@ -139,6 +140,41 @@ namespace FinanceAPI.Services
 
             await _context.Notifications.AddAsync(notification);
             return ApiResponse<Notification>.SuccessResponse(notification);
+        }
+
+        public async Task<byte[]> ExportExcel()
+        {
+            var billReminders = await _context.BillReminders
+                                            .Include(u => u.User)
+                                            .ToListAsync();
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                billReminders = billReminders.Where(t => t.UserId == userId).ToList();
+            }
+
+            var exportData = billReminders.Select(u => new
+            {
+                Id = u.Id,
+                Name = u.Name,
+                AmountDue = $"{u.AmountDue}$",
+                DueDate = u.DueDate.ToString("dd-MM-yyyy"),
+                IsPaid = u.IsPaid,
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("BillReminders");
+
+            worksheet.Cell("A1").InsertTable(exportData);
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
         }
     }
 }

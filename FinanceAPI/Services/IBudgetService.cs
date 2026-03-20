@@ -11,5 +11,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Budget>> Create(BudgetDTO budget);
         Task<ApiResponse<Budget>> Update(BudgetDTO budget, int? id);
         Task<ApiResponse<Budget>> Delete(int? id);
+        Task<byte[]> ExportExcel();
     }
 }

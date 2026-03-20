@@ -14,5 +14,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Notification>> Delete(int? id);
         Task<ApiResponse<List<NotificationType>>> GetNotificationTypes();
         Task<ApiResponse<List<Notification>>> ClearAll();
+        Task<byte[]> ExportExcel();
     }
 }

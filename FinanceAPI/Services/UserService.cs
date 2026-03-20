@@ -1,4 +1,5 @@
-﻿using FinanceAPI.Controllers;
+﻿using ClosedXML.Excel;
+using FinanceAPI.Controllers;
 using FinanceAPI.Data;
 using FinanceAPI.DTOs;
 using FinanceAPI.Helpers;
@@ -322,6 +323,34 @@ namespace FinanceAPI.Services
             }
 
             return ApiResponse<UserResponseDTO>.SuccessResponse(userResponse);
+        }
+
+        public async Task<byte[]> ExportExcel()
+        {
+            var users = await _context.Users
+                                    .Include(u => u.Role)
+                                    .ToListAsync();
+
+            var exportData = users.Select(u => new
+            {
+                Id = u.Id,
+                User = $"{u.FirstName} {u.LastName}",
+                Email = u.Email,
+                Role = u.Role!.Name,
+                IsActive = u.IsActive,
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy")
+            }).ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Users");
+
+            worksheet.Cell("A1").InsertTable(exportData);
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
         }
     }
 }
