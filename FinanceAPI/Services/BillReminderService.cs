@@ -6,6 +6,9 @@ using FinanceAPI.Helpers;
 using FinanceAPI.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using System.Security.Claims;
 
 namespace FinanceAPI.Services
@@ -144,26 +147,7 @@ namespace FinanceAPI.Services
 
         public async Task<byte[]> ExportExcel()
         {
-            var billReminders = await _context.BillReminders
-                                            .Include(u => u.User)
-                                            .ToListAsync();
-
-            if (!_currentUser.IsAdmin())
-            {
-                var userId = _currentUser.LoggedInUser();
-                billReminders = billReminders.Where(t => t.UserId == userId).ToList();
-            }
-
-            var exportData = billReminders.Select(u => new
-            {
-                Id = u.Id,
-                Name = u.Name,
-                AmountDue = $"{u.AmountDue}$",
-                DueDate = u.DueDate.ToString("dd-MM-yyyy"),
-                IsPaid = u.IsPaid,
-                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
-                User = $"{u.User!.FirstName} {u.User.LastName}"
-            }).ToList();
+            var exportData = await GetBillReminderExportData();
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("BillReminders");
@@ -175,6 +159,101 @@ namespace FinanceAPI.Services
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             return stream.ToArray();
+        }
+
+        public async Task<byte[]> ExportPdf()
+        {
+            var exportData = await GetBillReminderExportData();
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // Create the document
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(12));
+
+                    page.Header().Text("Bill Reminder Report").FontSize(20).SemiBold().FontColor(Colors.Blue.Medium);
+
+                    page.Content().PaddingVertical(30).Table(table =>
+                    {
+                        // Define columns
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(50);
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                        });
+
+                        // Add Header
+                        table.Header(header =>
+                        {
+                            header.Cell().BorderBottom(2).Padding(3).Text("Id").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Name").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("AmountDue").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("DueDate").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("IsPaid").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("CreatedDate").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("User").Bold();
+                        });
+
+                        // Add Data Rows
+                        foreach (var item in exportData)
+                        {
+                            table.Cell().Padding(3).Text(item.Id.ToString());
+                            table.Cell().Padding(3).Text(item.Name);
+                            table.Cell().Padding(3).Text(item.AmountDue);
+                            table.Cell().Padding(3).Text(item.DueDate);
+                            table.Cell().Padding(3).Text(item.IsPaid);
+                            table.Cell().Padding(3).Text(item.CreatedDate);
+                            table.Cell().Padding(3).Text(item.User);
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                    });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
+
+        private async Task<List<ExportBillReminderDataDTO>> GetBillReminderExportData()
+        {
+            var query = _context.BillReminders
+                                .Include(u => u.User)
+                                .AsQueryable();
+
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                query = query.Where(t => t.UserId == userId);
+            }
+
+            var billReminder = await query.ToListAsync();
+
+            return billReminder.Select(u => new ExportBillReminderDataDTO
+            {
+                Id = u.Id,
+                Name = u.Name,
+                AmountDue = $"{u.AmountDue}$",
+                DueDate = u.DueDate.ToString("dd-MM-yyyy"),
+                IsPaid = u.IsPaid.ToString(),
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
         }
     }
 }

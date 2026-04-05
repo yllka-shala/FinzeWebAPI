@@ -15,5 +15,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<UserResponseDTO>> UpdateProfile(UserProfileDTO profile, int? id);
         Task<ApiResponse<UserResponseDTO>> DeleteProfilePicture(int id);
         Task<byte[]> ExportExcel();
+        Task<byte[]> ExportPdf();
     }
 }

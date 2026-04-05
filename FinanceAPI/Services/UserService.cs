@@ -7,6 +7,9 @@ using FinanceAPI.Models;
 using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace FinanceAPI.Services
@@ -327,19 +330,7 @@ namespace FinanceAPI.Services
 
         public async Task<byte[]> ExportExcel()
         {
-            var users = await _context.Users
-                                    .Include(u => u.Role)
-                                    .ToListAsync();
-
-            var exportData = users.Select(u => new
-            {
-                Id = u.Id,
-                User = $"{u.FirstName} {u.LastName}",
-                Email = u.Email,
-                Role = u.Role!.Name,
-                IsActive = u.IsActive,
-                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy")
-            }).ToList();
+            var exportData = await GetUserExportData();
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Users");
@@ -351,6 +342,90 @@ namespace FinanceAPI.Services
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             return stream.ToArray();
+        }
+
+        public async Task<byte[]> ExportPdf()
+        {
+            var exportData = await GetUserExportData();
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // Create the document
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(12));
+
+                    page.Header().Text("Users Report").FontSize(20).SemiBold().FontColor(Colors.Blue.Medium);
+
+                    page.Content().PaddingVertical(30).Table(table =>
+                    {
+                        // Define columns
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(50);
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                        });
+
+                        // Add Header
+                        table.Header(header =>
+                        {
+                            header.Cell().BorderBottom(2).Padding(3).Text("Id").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Name").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Email").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Role").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("IsActive").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("CreatedDate").Bold();
+                        });
+
+                        // Add Data Rows
+                        foreach (var item in exportData)
+                        {
+                            table.Cell().Padding(3).Text(item.Id.ToString());
+                            table.Cell().Padding(3).Text(item.Name);
+                            table.Cell().Padding(3).Text(item.Email);
+                            table.Cell().Padding(3).Text(item.Role);
+                            table.Cell().Padding(3).Text(item.IsActive);
+                            table.Cell().Padding(3).Text(item.CreatedDate);
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                    });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
+
+        private async Task<List<ExportUserDTO>> GetUserExportData()
+        {
+            var query = _context.Users
+                                .Include(u => u.Role)
+                                .AsQueryable();
+
+            var user = await query.ToListAsync();
+
+            return user.Select(u => new ExportUserDTO
+            {
+                Id = u.Id,
+                Name = $"{u.FirstName} {u.LastName}",
+                Email = u.Email,
+                Role = u.Role!.Name,
+                IsActive = u.IsActive.ToString(),
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy")
+            }).ToList();
         }
     }
 }

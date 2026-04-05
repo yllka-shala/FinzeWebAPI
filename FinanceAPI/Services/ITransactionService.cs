@@ -13,5 +13,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Transaction>> Delete(int? id);
         Task<ApiResponse<List<PaymentMethod>>> GetPaymentMethods();
         Task<byte[]> ExportExcel();
+        Task<byte[]> ExportPdf();
     }
 }

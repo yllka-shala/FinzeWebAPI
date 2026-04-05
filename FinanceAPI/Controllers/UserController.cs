@@ -123,15 +123,31 @@ namespace FinanceAPI.Controllers
             return Ok(response);
         }
 
-        [HttpPost("ExportExcel")]
+        [HttpPost("ExportData")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> ExportExcel()
+        public async Task<IActionResult> ExportData(string format)
         {
-            var content = await _service.ExportExcel();
-            var contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-            var fileName = $"UserReport_{DateTime.Now:dd-MM-yyyy}.xlsx";
+            if (string.IsNullOrEmpty(format))
+            {
+                return BadRequest("Invalid format! Choose Excel or Pdf format!");
+            }
 
-            return File(content, contentType, fileName);
+            if (format.ToLower() == "excel")
+            {
+                var content = await _service.ExportExcel();
+                var contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"UserReport_{DateTime.Now:dd-MM-yyyy}.xlsx";
+
+                return File(content, contentType, fileName);
+            }
+            else
+            {
+                var content = await _service.ExportPdf();
+                var contentType = "application/pdf";
+                var fileName = $"UserReport_{DateTime.Now:dd-MM-yyyy}.pdf";
+
+                return File(content, contentType, fileName);
+            }
         }
     }
 }

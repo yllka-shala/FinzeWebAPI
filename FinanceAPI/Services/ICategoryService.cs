@@ -13,5 +13,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Category>> Update(CategoryDTO category, int? id);
         Task<ApiResponse<Category>> Delete(int? id);
         Task<byte[]> ExportExcel();
+        Task<byte[]> ExportPdf();
     }
 }

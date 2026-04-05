@@ -6,6 +6,9 @@ using FinanceAPI.Helpers;
 using FinanceAPI.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using System.Collections.Generic;
 using System.Security.Claims;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -254,29 +257,7 @@ namespace FinanceAPI.Services
 
         public async Task<byte[]> ExportExcel()
         {
-            var transactions = await _context.Transactions
-                                            .Include(c => c.Category)
-                                            .Include(pm => pm.PaymentMethod)
-                                            .Include(u => u.User)
-                                            .ToListAsync();
-
-            if (!_currentUser.IsAdmin())
-            {
-                var userId = _currentUser.LoggedInUser();
-                transactions = transactions.Where(t => t.UserId == userId).ToList();
-            }
-
-            var exportData = transactions.Select(u => new
-            {
-                Id = u.Id,
-                Description = u.Description,
-                Amount = $"{u.Amount}$",
-                Category = u.Category!.Name,
-                TransactionDate = u.TransactionDate.ToString("dd-MM-yyyy"),
-                PaymentMethod = u.PaymentMethod!.Name,
-                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
-                User = $"{u.User!.FirstName} {u.User.LastName}"
-            }).ToList();
+            var exportData = await GetTransactionExportData();
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Transactions");
@@ -288,6 +269,107 @@ namespace FinanceAPI.Services
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             return stream.ToArray();
+        }
+
+        public async Task<byte[]> ExportPdf()
+        {
+            var exportData = await GetTransactionExportData();
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // Create the document
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(12));
+
+                    page.Header().Text("Transaction Report").FontSize(20).SemiBold().FontColor(Colors.Blue.Medium);
+
+                    page.Content().PaddingVertical(30).Table(table =>
+                    {
+                        // Define columns
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(50);
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                        });
+
+                        // Add Header
+                        table.Header(header =>
+                        {
+                            header.Cell().BorderBottom(2).Padding(3).Text("Id").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Description").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Amount").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Category").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("TransactionDate").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("PaymentMethod").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("CreatedDate").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("User").Bold();
+                        });
+
+                        // Add Data Rows
+                        foreach (var item in exportData)
+                        {
+                            table.Cell().Padding(3).Text(item.Id.ToString());
+                            table.Cell().Padding(3).Text(item.Description);
+                            table.Cell().Padding(3).Text(item.Amount);
+                            table.Cell().Padding(3).Text(item.Category);
+                            table.Cell().Padding(3).Text(item.TransactionDate);
+                            table.Cell().Padding(3).Text(item.PaymentMethod);
+                            table.Cell().Padding(3).Text(item.CreatedDate);
+                            table.Cell().Padding(3).Text(item.User);
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                    });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
+
+        private async Task<List<ExportTransactionsDTO>> GetTransactionExportData()
+        {
+            var query = _context.Transactions
+                                .Include(c => c.Category)
+                                .Include(pm => pm.PaymentMethod)
+                                .Include(u => u.User)
+                                .AsQueryable();
+
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                query = query.Where(t => t.UserId == userId);
+            }
+
+            var transactions = await query.ToListAsync();
+
+            return transactions.Select(u => new ExportTransactionsDTO
+            {
+                Id = u.Id,
+                Description = u.Description,
+                Amount = $"{u.Amount}$",
+                Category = u.Category!.Name,
+                TransactionDate = u.TransactionDate.ToString("dd-MM-yyyy"),
+                PaymentMethod = u.PaymentMethod!.Name,
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
         }
     }
 }

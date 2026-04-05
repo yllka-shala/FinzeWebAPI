@@ -5,6 +5,9 @@ using FinanceAPI.Helpers;
 using FinanceAPI.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using System.Security.Claims;
 
 namespace FinanceAPI.Services
@@ -153,26 +156,7 @@ namespace FinanceAPI.Services
 
         public async Task<byte[]> ExportExcel()
         {
-            var financialAccounts = await _context.FinancialAccounts
-                                                .Include(fa => fa.AccountType)
-                                                .Include(u => u.User)
-                                                .ToListAsync();
-
-            if (!_currentUser.IsAdmin())
-            {
-                var userId = _currentUser.LoggedInUser();
-                financialAccounts = financialAccounts.Where(t => t.UserId == userId).ToList();
-            }
-
-            var exportData = financialAccounts.Select(u => new
-            {
-                Id = u.Id,
-                AccountType = u.AccountType!.Name,
-                AccountBalance = $"{u.AccountBalance}$",
-                Bank = u.Bank,
-                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
-                User = $"{u.User!.FirstName} {u.User.LastName}"
-            }).ToList();
+            var exportData = await GetFinancialAccountExportData();
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("FinancialAccount");
@@ -184,6 +168,98 @@ namespace FinanceAPI.Services
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             return stream.ToArray();
+        }
+
+        public async Task<byte[]> ExportPdf()
+        {
+            var exportData = await GetFinancialAccountExportData();
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // Create the document
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(12));
+
+                    page.Header().Text("Financial Account Report").FontSize(20).SemiBold().FontColor(Colors.Blue.Medium);
+
+                    page.Content().PaddingVertical(30).Table(table =>
+                    {
+                        // Define columns
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(50);
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                        });
+
+                        // Add Header
+                        table.Header(header =>
+                        {
+                            header.Cell().BorderBottom(2).Padding(3).Text("Id").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("AccountType").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("AccountBalance").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("Bank").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("CreatedDate").Bold();
+                            header.Cell().BorderBottom(2).Padding(3).Text("User").Bold();
+                        });
+
+                        // Add Data Rows
+                        foreach (var item in exportData)
+                        {
+                            table.Cell().Padding(3).Text(item.Id.ToString());
+                            table.Cell().Padding(3).Text(item.AccountType);
+                            table.Cell().Padding(3).Text(item.AccountBalance);
+                            table.Cell().Padding(3).Text(item.Bank);
+                            table.Cell().Padding(3).Text(item.CreatedDate);
+                            table.Cell().Padding(3).Text(item.User);
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                    });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
+
+        private async Task<List<ExportFinancialAccountDataDTO>> GetFinancialAccountExportData()
+        {
+            var query = _context.FinancialAccounts
+                                                .Include(fa => fa.AccountType)
+                                                .Include(u => u.User)
+                                                .AsQueryable();
+
+
+            if (!_currentUser.IsAdmin())
+            {
+                var userId = _currentUser.LoggedInUser();
+                query = query.Where(t => t.UserId == userId);
+            }
+
+            var financialAccounts = await query.ToListAsync();
+
+            return financialAccounts.Select(u => new ExportFinancialAccountDataDTO
+            {
+                Id = u.Id,
+                AccountType = u.AccountType!.Name,
+                AccountBalance = $"{u.AccountBalance}$",
+                Bank = u.Bank,
+                CreatedDate = u.CreatedDate.ToString("dd-MM-yyyy"),
+                User = $"{u.User!.FirstName} {u.User.LastName}"
+            }).ToList();
         }
     }
 }

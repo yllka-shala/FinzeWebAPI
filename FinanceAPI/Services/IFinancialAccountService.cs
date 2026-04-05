@@ -13,5 +13,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<FinancialAccount>> Delete(int? id);
         Task<ApiResponse<List<AccountType>>> GetAccountTypes();
         Task<byte[]> ExportExcel();
+        Task<byte[]> ExportPdf();
     }
 }

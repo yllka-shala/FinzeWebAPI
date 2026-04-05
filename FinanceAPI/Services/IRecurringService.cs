@@ -13,5 +13,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Recurring>> Delete(int? id);
         Task<ApiResponse<List<Frequency>>> GetFrequencies();
         Task<byte[]> ExportExcel();
+        Task<byte[]> ExportPdf();
     }
 }

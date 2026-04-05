@@ -12,5 +12,6 @@ namespace FinanceAPI.Services
         Task<ApiResponse<Goal>> Update(GoalDTO update, int? id);
         Task<ApiResponse<Goal>> Delete(int? id);
         Task<byte[]> ExportExcel();
+        Task<byte[]> ExportPdf();
     }
 }
