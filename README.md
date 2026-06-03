@@ -38,8 +38,11 @@ git clone https://github.com/yllka-shala/FinzeWebAPI.git
 2. **Open the solution:**
 Open `FinanceApi.sln` in Visual Studio.
 
-3. **Migrate database:**
+3. **Open the AppSettings.json file:**
+Add your own "Your_Server", "Your_Email" and "Your_Password".
+
+4. **Migrate database:**
 In Package Manager Console add command Update-Database to create the database in MSSQL.
 
-4. **Run:**
+5. **Run:**
 Press `F5` to build and launch the app.
